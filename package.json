@@ -20,7 +20,9 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "docker:build": "docker-compose build",
     "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down --volumes"
+    "docker:down": "docker-compose down --volumes",
+    "docker:start": "docker-compose up -d --build",
+    "docker:stop": "docker-compose down"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
