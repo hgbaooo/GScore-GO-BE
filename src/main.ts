@@ -40,14 +40,14 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
 
   app.enableCors({
-		origin: [
-			'http://localhost:5173',
-			'https://g-score-go-internship-assignment-fe.vercel.app',
+    origin: [
+      'http://localhost:5173',
+      'https://g-score-go-internship-assignment-fe.vercel.app',
       'https://g-score-go-internship-assignment-fe-hgbaooos-projects.vercel.app',
-		],
-		methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-		credentials: true,
-	});
+    ],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    credentials: true,
+  });
 
   await app.listen(port);
   logger.log(`Server running on http://localhost:${configService.get('PORT')}`);

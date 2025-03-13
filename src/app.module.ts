@@ -4,6 +4,8 @@ import { configuration } from './configs/configuration';
 import { MongooseModule } from '@nestjs/mongoose';
 import { StudentsModule } from './modules/students/students.module';
 import * as Joi from 'joi';
+import { SubjectModule } from './modules/subjects/subjects.module';
+import { ScoreModule } from './modules/scores/scores.module';
 
 @Module({
   imports: [
@@ -28,7 +30,9 @@ import * as Joi from 'joi';
       }),
       inject: [ConfigService],
     }),
+    SubjectModule,
     StudentsModule,
+    ScoreModule,
   ],
   controllers: [],
   providers: [],

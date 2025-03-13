@@ -1,39 +1,26 @@
-import {
-  Controller,
-  Get,
-  Query,
-  UsePipes,
-  ValidationPipe,
-} from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { StudentsService } from './students.service';
-import { FindBySbdDto } from './dtos/find-by-sbd.dto';
 import { Student } from './entities/student.entity';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiQuery,
-  ApiOkResponse,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiOkResponse } from '@nestjs/swagger';
 
 @ApiTags('students')
 @Controller('students')
 export class StudentsController {
   constructor(private readonly studentsService: StudentsService) {}
 
-  @Get('find')
-  @ApiOperation({ summary: 'Find a student by registration number (SBD)' })
-  @ApiQuery({
-    name: 'sbd',
-    type: String,
-    description: 'Student registration number',
-  })
-  @ApiOkResponse({ description: 'The student record', type: Student })
-  @ApiResponse({ status: 404, description: 'Student not found' })
-  @UsePipes(new ValidationPipe({ transform: true }))
-  async findBySbd(@Query() query: FindBySbdDto): Promise<Student> {
-    return this.studentsService.findBySbd(query.sbd);
-  }
+  // @Get('find')
+  // @ApiOperation({ summary: 'Find a student by registration number (SBD)' })
+  // @ApiQuery({
+  //   name: 'sbd',
+  //   type: String,
+  //   description: 'Student registration number',
+  // })
+  // @ApiOkResponse({ description: 'The student record', type: Student })
+  // @ApiResponse({ status: 404, description: 'Student not found' })
+  // @UsePipes(new ValidationPipe({ transform: true }))
+  // async findBySbd(@Query() query: FindBySbdDto): Promise<Student> {
+  //   return this.studentsService.findBySbd(query.sbd);
+  // }
 
   @Get('report')
   @ApiOperation({ summary: 'Get score report' })

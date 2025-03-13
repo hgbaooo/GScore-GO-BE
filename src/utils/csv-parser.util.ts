@@ -1,27 +1,57 @@
 import * as csv from 'csv-parser';
 import * as fs from 'fs';
+import { CreateScoreDto } from 'src/modules/scores/dto/create-score.dto';
 import { CreateStudentDto } from 'src/modules/students/dtos/create-student.dto';
+import { CreateSubjectDto } from 'src/modules/subjects/dto/create-subject.dto';
 
-export async function parseCsv(filePath: string): Promise<CreateStudentDto[]> {
+interface ParsedCsv {
+  students: CreateStudentDto[];
+  scores: CreateScoreDto[];
+  subjects: CreateSubjectDto[];
+}
+
+export async function parseCsv(filePath: string): Promise<ParsedCsv> {
   return new Promise((resolve, reject) => {
-    const results: CreateStudentDto[] = [];
+    const results: ParsedCsv = {
+      students: [],
+      scores: [],
+      subjects: [],
+    };
     fs.createReadStream(filePath)
       .pipe(csv())
       .on('data', (data: { [key: string]: string }) => {
         const student: CreateStudentDto = {
-          sbd: data.sbd,
-          toan: data.toan ? parseFloat(data.toan) : undefined,
-          ngu_van: data.ngu_van ? parseFloat(data.ngu_van) : undefined,
-          ngoai_ngu: data.ngoai_ngu ? parseFloat(data.ngoai_ngu) : undefined,
-          vat_li: data.vat_li ? parseFloat(data.vat_li) : undefined,
-          hoa_hoc: data.hoa_hoc ? parseFloat(data.hoa_hoc) : undefined,
-          sinh_hoc: data.sinh_hoc ? parseFloat(data.sinh_hoc) : undefined,
-          lich_su: data.lich_su ? parseFloat(data.lich_su) : undefined,
-          dia_li: data.dia_li ? parseFloat(data.dia_li) : undefined,
-          gdcd: data.gdcd ? parseFloat(data.gdcd) : undefined,
-          ma_ngoai_ngu: data.ma_ngoai_ngu,
+          registrationNumber: data.sbd,
+          foreignLanguageCode: data.ma_ngoai_ngu,
         };
-        results.push(student);
+        results.students.push(student);
+
+        const scoreFields = [
+          'toan',
+          'ngu_van',
+          'ngoai_ngu',
+          'vat_li',
+          'hoa_hoc',
+          'sinh_hoc',
+          'lich_su',
+          'dia_li',
+          'gdcd',
+        ];
+        scoreFields.forEach((subject) => {
+          if (data[subject]) {
+            results.scores.push({
+              registrationNumber: data.sbd,
+              subject: subject,
+              score: parseFloat(data[subject]),
+            });
+          }
+        });
+
+        scoreFields.forEach((subject) => {
+          if (!results.subjects.some((s) => s.name === subject)) {
+            results.subjects.push({ name: subject });
+          }
+        });
       })
       .on('end', () => resolve(results))
       .on('error', (error) => reject(error));

@@ -3,30 +3,77 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Student } from 'src/modules/students/entities/student.entity';
 import { parseCsv } from 'src/utils/csv-parser.util';
+import { Subject } from 'src/modules/subjects/entities/subject.entity';
+import { Score } from 'src/modules/scores/entities/score.entity';
+import { CreateStudentDto } from 'src/modules/students/dtos/create-student.dto';
+import { CreateScoreDto } from 'src/modules/scores/dto/create-score.dto';
+import { CreateSubjectDto } from 'src/modules/subjects/dto/create-subject.dto';
 
 @Injectable()
 export class StudentSeeder {
+  private readonly filePath = 'src/diem_thi_thpt_2024.csv';
+  private readonly batchSize = 10000;
+
   constructor(
     @InjectModel(Student.name) private readonly studentModel: Model<Student>,
+    @InjectModel(Subject.name) private readonly subjectModel: Model<Subject>,
+    @InjectModel(Score.name) private readonly scoreModel: Model<Score>,
   ) {}
 
   async seed() {
     try {
-      const filePath = 'src/diem_thi_thpt_2024.csv';
-      const rawData = await parseCsv(filePath);
-      const batchSize = 10000;
+      console.time('Seeding Time');
+      console.log(`[${new Date().toISOString()}] Starting seeding process...`);
 
-      console.log(`Starting seeding of ${rawData.length} records...`);
+      const { students, scores, subjects } = (await parseCsv(
+        this.filePath,
+      )) as {
+        students: CreateStudentDto[];
+        scores: CreateScoreDto[];
+        subjects: CreateSubjectDto[];
+      };
 
-      for (let i = 0; i < rawData.length; i += batchSize) {
-        const batch = rawData.slice(i, i + batchSize);
-        await this.studentModel.insertMany(batch, { ordered: false });
-        console.log(
-          `Inserted ${i + batch.length}/${rawData.length} records...`,
+      console.log(
+        `Parsed ${students.length} students, ${scores.length} scores, and ${subjects.length} subjects.`,
+      );
+
+      await Promise.all(
+        subjects.map((subject) =>
+          this.subjectModel.updateOne({ name: subject.name }, subject, {
+            upsert: true,
+          }),
+        ),
+      );
+      console.log(`Subjects inserted/updated.`);
+
+      for (let i = 0; i < students.length; i += this.batchSize) {
+        const studentBatch = students.slice(i, i + this.batchSize);
+        const studentRegistrationNumbers = new Set(
+          studentBatch.map((student) => student.registrationNumber),
         );
+        const scoreBatch = scores.filter((score) =>
+          studentRegistrationNumbers.has(score.registrationNumber),
+        );
+
+        try {
+          await Promise.all([
+            this.studentModel.insertMany(studentBatch, { ordered: false }),
+            this.scoreModel.insertMany(scoreBatch, { ordered: false }),
+          ]);
+
+          console.log(
+            `[${new Date().toISOString()}] Inserted ${i + studentBatch.length}/${students.length} students and ${i + scoreBatch.length}/${scores.length} scores.`,
+          );
+        } catch (batchError) {
+          console.error(
+            `Error inserting batch ${i / this.batchSize + 1}:`,
+            batchError,
+          );
+        }
       }
 
       console.log('Seeding complete.');
+      console.timeEnd('Seeding Time');
     } catch (error) {
       console.error('Seeding failed:', error);
       throw error;
