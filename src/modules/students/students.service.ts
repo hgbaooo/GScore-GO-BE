@@ -3,11 +3,35 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Student } from './entities/student.entity';
 import { StudentSeeder } from 'src/migrations/SeedStudents';
+import { Score } from '../scores/entities/score.entity';
+
+// Define interfaces for our data structures
+export interface StudentScore {
+  registrationNumber: string;
+  totalScore: number;
+  scores: Array<{
+    subject: string;
+    score: number;
+  }>;
+  subjectCount: number;
+}
+
+export interface TopStudentResult {
+  _id: any;
+  registrationNumber: string;
+  foreignLanguageCode: string;
+  totalScore: number;
+  scores: Array<{
+    subject: string;
+    score: number;
+  }>;
+}
 
 @Injectable()
 export class StudentsService implements OnModuleInit {
   constructor(
     @InjectModel(Student.name) private readonly studentModel: Model<Student>,
+    @InjectModel(Score.name) private readonly scoreModel: Model<Score>,
     private readonly studentSeeder: StudentSeeder,
   ) {}
 
@@ -26,121 +50,115 @@ export class StudentsService implements OnModuleInit {
     }
   }
 
-  async findBySbd(sbd: string): Promise<Student> {
-    const student = await this.studentModel.findOne({ sbd }).exec();
-    if (!student) {
-      throw new NotFoundException(`Student with SBD ${sbd} not found`);
-    }
-    return student;
-  }
+  async findByRegistrationNumber(registrationNumber: string): Promise<any> {
+    try {
+      const student = await this.studentModel
+        .findOne({ registrationNumber })
+        .exec();
 
-  async getScoreReport(): Promise<any> {
-    const subjects = [
-      'toan',
-      'ngu_van',
-      'ngoai_ngu',
-      'vat_li',
-      'hoa_hoc',
-      'sinh_hoc',
-      'lich_su',
-      'dia_li',
-      'gdcd',
-    ];
-
-    const pipeline = [
-      {
-        $facet: subjects.reduce((acc, subject) => {
-          acc[subject] = [
-            {
-              $group: {
-                _id: null,
-                '>=8': {
-                  $sum: { $cond: [{ $gte: [`$${subject}`, 8] }, 1, 0] },
-                },
-                '6-8': {
-                  $sum: {
-                    $cond: [
-                      {
-                        $and: [
-                          { $gte: [`$${subject}`, 6] },
-                          { $lt: [`$${subject}`, 8] },
-                        ],
-                      },
-                      1,
-                      0,
-                    ],
-                  },
-                },
-                '4-6': {
-                  $sum: {
-                    $cond: [
-                      {
-                        $and: [
-                          { $gte: [`$${subject}`, 4] },
-                          { $lt: [`$${subject}`, 6] },
-                        ],
-                      },
-                      1,
-                      0,
-                    ],
-                  },
-                },
-                '<4': { $sum: { $cond: [{ $lt: [`$${subject}`, 4] }, 1, 0] } },
-              },
-            },
-            { $project: { _id: 0 } },
-          ];
-          return acc;
-        }, {}),
-      },
-    ];
-
-    const result = await this.studentModel
-      .aggregate<{
-        [key: string]: {
-          '>=8': number;
-          '6-8': number;
-          '4-6': number;
-          '<4': number;
-        }[];
-      }>(pipeline)
-      .exec();
-    const rawData = result[0];
-
-    const formattedResult = {
-      '>=8': {},
-      '6-8': {},
-      '4-6': {},
-      '<4': {},
-    };
-
-    subjects.forEach((subject) => {
-      if (rawData[subject] && rawData[subject].length > 0) {
-        formattedResult['>=8'][subject] = rawData[subject][0]['>=8'] || 0;
-        formattedResult['6-8'][subject] = rawData[subject][0]['6-8'] || 0;
-        formattedResult['4-6'][subject] = rawData[subject][0]['4-6'] || 0;
-        formattedResult['<4'][subject] = rawData[subject][0]['<4'] || 0;
+      if (!student) {
+        throw new NotFoundException(
+          `Student with registration number ${registrationNumber} not found`,
+        );
       }
-    });
 
-    return formattedResult;
+      // Get scores for this student
+      const scores = await this.scoreModel
+        .find({ registrationNumber })
+        .select('subject score -_id')
+        .exec();
+
+      // Return student with scores
+      return {
+        _id: student._id,
+        registrationNumber: student.registrationNumber,
+        foreignLanguageCode: student.foreignLanguageCode,
+        scores: scores || [],
+      };
+    } catch (error) {
+      console.error(
+        `Error finding student by registration number: ${registrationNumber}`,
+        error,
+      );
+      throw error;
+    }
   }
 
-  async getTop10GroupA(): Promise<Student[]> {
-    return this.studentModel
-      .aggregate<Student>([
-        {
-          $addFields: {
-            totalScore: { $sum: ['$toan', '$vat_li', '$hoa_hoc'] },
-          },
-        },
-        {
-          $sort: { totalScore: -1 },
-        },
-        {
-          $limit: 10,
-        },
-      ])
-      .exec();
+  async getTop10GroupA(): Promise<TopStudentResult[]> {
+    const groupASubjects = ['toan', 'vat_li', 'hoa_hoc'];
+
+    try {
+      // Step 1: Get all scores for Group A subjects
+      interface GroupAScore {
+        registrationNumber: string;
+        subject: string;
+        score: number;
+      }
+
+      const groupAScores = (await this.scoreModel
+        .find({ subject: { $in: groupASubjects } })
+        .select('registrationNumber subject score')
+        .lean()
+        .exec()) as unknown as GroupAScore[];
+
+      // Step 2: Process the scores in memory to calculate totals
+      const studentScores: Record<string, StudentScore> = {};
+
+      for (const score of groupAScores) {
+        const { registrationNumber, subject, score: scoreValue } = score;
+
+        if (!studentScores[registrationNumber]) {
+          studentScores[registrationNumber] = {
+            registrationNumber,
+            totalScore: 0,
+            scores: [],
+            subjectCount: 0,
+          };
+        }
+
+        studentScores[registrationNumber].totalScore += scoreValue;
+        studentScores[registrationNumber].scores.push({
+          subject,
+          score: scoreValue,
+        });
+        studentScores[registrationNumber].subjectCount += 1;
+      }
+
+      // Step 3: Filter students with all three subjects
+      const studentsWithAllSubjects: StudentScore[] = Object.values(
+        studentScores,
+      ).filter((student) => student.subjectCount === 3);
+
+      // Step 4: Sort by total score and get top 10
+      const top10Students = studentsWithAllSubjects
+        .sort((a, b) => b.totalScore - a.totalScore)
+        .slice(0, 10);
+
+      // Step 5: Get student details for top 10
+      const results: TopStudentResult[] = [];
+
+      for (const student of top10Students) {
+        const studentDetails = await this.studentModel
+          .findOne({ registrationNumber: student.registrationNumber })
+          .select('_id registrationNumber foreignLanguageCode')
+          .lean()
+          .exec();
+
+        if (studentDetails) {
+          results.push({
+            _id: studentDetails._id,
+            registrationNumber: studentDetails.registrationNumber,
+            foreignLanguageCode: studentDetails.foreignLanguageCode,
+            totalScore: student.totalScore,
+            scores: student.scores,
+          });
+        }
+      }
+
+      return results;
+    } catch (error) {
+      console.error('Error in getTop10GroupA:', error);
+      throw error;
+    }
   }
 }

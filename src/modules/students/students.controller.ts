@@ -1,19 +1,12 @@
-import {
-  Controller,
-  Get,
-  Query,
-  UsePipes,
-  ValidationPipe,
-} from '@nestjs/common';
-import { StudentsService } from './students.service';
-import { FindBySbdDto } from './dtos/find-by-sbd.dto';
+import { Controller, Get, Param } from '@nestjs/common';
+import { StudentsService, TopStudentResult } from './students.service';
 import { Student } from './entities/student.entity';
 import {
   ApiTags,
   ApiOperation,
-  ApiResponse,
-  ApiQuery,
   ApiOkResponse,
+  ApiParam,
+  ApiResponse,
 } from '@nestjs/swagger';
 
 @ApiTags('students')
@@ -21,31 +14,28 @@ import {
 export class StudentsController {
   constructor(private readonly studentsService: StudentsService) {}
 
-  @Get('find')
-  @ApiOperation({ summary: 'Find a student by registration number (SBD)' })
-  @ApiQuery({
-    name: 'sbd',
-    type: String,
-    description: 'Student registration number',
-  })
-  @ApiOkResponse({ description: 'The student record', type: Student })
-  @ApiResponse({ status: 404, description: 'Student not found' })
-  @UsePipes(new ValidationPipe({ transform: true }))
-  async findBySbd(@Query() query: FindBySbdDto): Promise<Student> {
-    return this.studentsService.findBySbd(query.sbd);
-  }
-
-  @Get('report')
-  @ApiOperation({ summary: 'Get score report' })
-  @ApiOkResponse({ description: 'The score report of student' })
-  async getScoreReport(): Promise<any> {
-    return this.studentsService.getScoreReport();
-  }
-
   @Get('top10-groupA')
   @ApiOperation({ summary: 'Get top 10 students in group A' })
   @ApiOkResponse({ description: 'Top 10 student group A', type: [Student] })
-  async getTop10GroupA(): Promise<Student[]> {
+  async getTop10GroupA(): Promise<TopStudentResult[]> {
     return this.studentsService.getTop10GroupA();
+  }
+
+  @Get(':registrationNumber')
+  @ApiOperation({ summary: 'Find a student by registration number' })
+  @ApiParam({
+    name: 'registrationNumber',
+    description: 'Student registration number',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'The student record',
+    type: Student,
+  })
+  @ApiResponse({ status: 404, description: 'Student not found' })
+  async findByRegistrationNumber(
+    @Param('registrationNumber') registrationNumber: string,
+  ): Promise<any> {
+    return this.studentsService.findByRegistrationNumber(registrationNumber);
   }
 }
