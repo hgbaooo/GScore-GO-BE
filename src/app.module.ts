@@ -13,6 +13,7 @@ import { ScoreModule } from './modules/scores/scores.module';
       validationSchema: Joi.object({
         PORT: Joi.number().default(3000),
         MONGODB_URI: Joi.string().required(),
+        CORS_ORIGINS: Joi.string().required(),
       }),
       validationOptions: {
         abortEarly: false,

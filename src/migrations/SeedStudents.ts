@@ -48,25 +48,31 @@ export class StudentSeeder {
 
       for (let i = 0; i < students.length; i += this.batchSize) {
         const studentBatch = students.slice(i, i + this.batchSize);
-        const studentRegistrationNumbers = new Set(
-          studentBatch.map((student) => student.registrationNumber),
-        );
-        const scoreBatch = scores.filter((score) =>
-          studentRegistrationNumbers.has(score.registrationNumber),
-        );
 
         try {
-          await Promise.all([
-            this.studentModel.insertMany(studentBatch, { ordered: false }),
-            this.scoreModel.insertMany(scoreBatch, { ordered: false }),
-          ]);
-
+          await this.studentModel.insertMany(studentBatch, { ordered: false });
           console.log(
-            `[${new Date().toISOString()}] Inserted ${i + studentBatch.length}/${students.length} students and ${i + scoreBatch.length}/${scores.length} scores.`,
+            `[${new Date().toISOString()}] Inserted ${i + studentBatch.length}/${students.length} students.`,
           );
         } catch (batchError) {
           console.error(
-            `Error inserting batch ${i / this.batchSize + 1}:`,
+            `Error inserting student batch ${i / this.batchSize + 1}:`,
+            batchError,
+          );
+        }
+      }
+
+      for (let i = 0; i < scores.length; i += this.batchSize) {
+        const scoreBatch = scores.slice(i, i + this.batchSize);
+
+        try {
+          await this.scoreModel.insertMany(scoreBatch, { ordered: false });
+          console.log(
+            `[${new Date().toISOString()}] Inserted ${i + scoreBatch.length}/${scores.length} scores.`,
+          );
+        } catch (batchError) {
+          console.error(
+            `Error inserting score batch ${i / this.batchSize + 1}:`,
             batchError,
           );
         }
