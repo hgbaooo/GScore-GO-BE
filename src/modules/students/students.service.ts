@@ -88,74 +88,95 @@ export class StudentsService implements OnModuleInit {
     const groupASubjects = ['toan', 'vat_li', 'hoa_hoc'];
 
     try {
-      // Step 1: Get all scores for Group A subjects
-      interface GroupAScore {
-        registrationNumber: string;
-        subject: string;
-        score: number;
+      // First, find the students who have all three subjects
+      interface QualifyingStudent {
+        _id: string;
       }
 
-      const groupAScores = (await this.scoreModel
-        .find({ subject: { $in: groupASubjects } })
-        .select('registrationNumber subject score')
-        .lean()
-        .exec()) as unknown as GroupAScore[];
+      const studentsWithAllSubjects = await this.scoreModel
+        .aggregate<QualifyingStudent>([
+          { $match: { subject: { $in: groupASubjects } } },
+          {
+            $group: {
+              _id: '$registrationNumber',
+              subjectCount: { $sum: 1 },
+              subjects: { $push: '$subject' },
+            },
+          },
+          { $match: { subjectCount: 3 } },
+          { $project: { _id: 1 } },
+        ])
+        .allowDiskUse(true)
+        .exec();
 
-      // Step 2: Process the scores in memory to calculate totals
-      const studentScores: Record<string, StudentScore> = {};
+      // Get the registration numbers of qualifying students
+      const qualifyingRegNums = studentsWithAllSubjects.map(
+        (student) => student._id,
+      );
 
-      for (const score of groupAScores) {
-        const { registrationNumber, subject, score: scoreValue } = score;
-
-        if (!studentScores[registrationNumber]) {
-          studentScores[registrationNumber] = {
-            registrationNumber,
-            totalScore: 0,
-            scores: [],
-            subjectCount: 0,
-          };
-        }
-
-        studentScores[registrationNumber].totalScore += scoreValue;
-        studentScores[registrationNumber].scores.push({
-          subject,
-          score: scoreValue,
-        });
-        studentScores[registrationNumber].subjectCount += 1;
+      if (qualifyingRegNums.length === 0) {
+        return [];
       }
 
-      // Step 3: Filter students with all three subjects
-      const studentsWithAllSubjects: StudentScore[] = Object.values(
-        studentScores,
-      ).filter((student) => student.subjectCount === 3);
+      // Now perform the main aggregation only on these students
+      const results = await this.scoreModel
+        .aggregate([
+          // Match only qualifying students and Group A subjects
+          {
+            $match: {
+              registrationNumber: { $in: qualifyingRegNums },
+              subject: { $in: groupASubjects },
+            },
+          },
 
-      // Step 4: Sort by total score and get top 10
-      const top10Students = studentsWithAllSubjects
-        .sort((a, b) => b.totalScore - a.totalScore)
-        .slice(0, 10);
+          // Group by registration number and calculate total score
+          {
+            $group: {
+              _id: '$registrationNumber',
+              totalScore: { $sum: '$score' },
+              scores: {
+                $push: {
+                  subject: '$subject',
+                  score: '$score',
+                },
+              },
+            },
+          },
 
-      // Step 5: Get student details for top 10
-      const results: TopStudentResult[] = [];
+          // Sort by total score
+          { $sort: { totalScore: -1 } },
 
-      for (const student of top10Students) {
-        const studentDetails = await this.studentModel
-          .findOne({ registrationNumber: student.registrationNumber })
-          .select('_id registrationNumber foreignLanguageCode')
-          .lean()
-          .exec();
+          // Limit to top 10
+          { $limit: 10 },
 
-        if (studentDetails) {
-          results.push({
-            _id: studentDetails._id,
-            registrationNumber: studentDetails.registrationNumber,
-            foreignLanguageCode: studentDetails.foreignLanguageCode,
-            totalScore: student.totalScore,
-            scores: student.scores,
-          });
-        }
-      }
+          // Lookup student details
+          {
+            $lookup: {
+              from: 'students',
+              localField: '_id',
+              foreignField: 'registrationNumber',
+              as: 'studentDetails',
+            },
+          },
 
-      return results;
+          // Unwind student details
+          { $unwind: '$studentDetails' },
+
+          // Project final result
+          {
+            $project: {
+              _id: '$studentDetails._id',
+              registrationNumber: '$_id',
+              foreignLanguageCode: '$studentDetails.foreignLanguageCode',
+              totalScore: 1,
+              scores: 1,
+            },
+          },
+        ])
+        .allowDiskUse(true)
+        .exec();
+
+      return results as TopStudentResult[];
     } catch (error) {
       console.error('Error in getTop10GroupA:', error);
       throw error;
